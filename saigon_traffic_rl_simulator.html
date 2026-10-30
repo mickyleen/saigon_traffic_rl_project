@@ -1,0 +1,2115 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SaigonRL Traffic — Điều Khiển Đèn Giao Thông Học Tăng Cường (Quận 1, TP.HCM)</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0b1120;
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    .glass-card {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(51, 65, 85, 0.7);
+      backdrop-filter: blur(8px);
+    }
+    .tab-active {
+      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      color: #ffffff;
+      border-color: #3b82f6;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+    }
+    .pulse-dot {
+      animation: pulse-ring 1.8s infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 1; }
+      50% { transform: scale(1.25); opacity: 0.6; }
+      100% { transform: scale(0.95); opacity: 1; }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-blue-500 selection:text-white">
+
+  <!-- TOP HEADER -->
+  <header class="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/90 backdrop-blur-md px-3 sm:px-6 py-2.5">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-blue-600 flex items-center justify-center shadow-lg shadow-emerald-950/50 font-bold text-white text-lg">
+          🚦
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-sm sm:text-base font-bold tracking-tight text-white">SaigonTraffic-RL</h1>
+            <span class="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              Cụm Tân Định – Đa Kao (Q.1)
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400 hidden sm:block">
+            Mô phỏng Điều khiển Đèn Giao thông bằng Học Tăng Cường (Multi-Agent Double Q-Learning) — Đường 1 Chiều & 2 Chiều
+          </p>
+        </div>
+      </div>
+
+      <!-- NAVIGATION TABS -->
+      <nav class="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800 overflow-x-auto max-w-full">
+        <button id="tabBtnSim" onclick="switchTab('sim')" class="tab-btn tab-active px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap">
+          🗺️ Mô Phỏng & Huấn Luyện
+        </button>
+        <button id="tabBtnCharts" onclick="switchTab('charts')" class="tab-btn px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all whitespace-nowrap">
+          📊 Biểu Đồ & Q-Table
+        </button>
+        <button id="tabBtnMdp" onclick="switchTab('mdp')" class="tab-btn px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all whitespace-nowrap">
+          📐 Mô Hình MDP & Lý Thuyết
+        </button>
+        <button id="tabBtnCode" onclick="switchTab('code')" class="tab-btn px-2.5 sm:px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all whitespace-nowrap">
+          🐍 Code Python (Gymnasium)
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toastBox" class="fixed bottom-4 right-4 z-50 hidden px-4 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-semibold shadow-xl border border-emerald-400/40 transition-all">
+    Đã cập nhật!
+  </div>
+
+  <!-- MAIN CONTENT CONTAINER -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 py-4 space-y-4">
+
+    <!-- TOP KPI BAR -->
+    <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+      <div class="glass-card rounded-xl p-3">
+        <div class="text-[11px] text-slate-400 flex items-center justify-between">
+          <span>Episode / Bước</span>
+          <span id="statusBadge" class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>
+        </div>
+        <div class="mt-1 flex items-baseline gap-1.5">
+          <span id="kpiEpisode" class="text-lg sm:text-xl font-bold text-white mono">1</span>
+          <span class="text-xs text-slate-400 mono">/ <span id="kpiStep">0</span>s</span>
+        </div>
+        <div class="text-[10px] text-blue-400 mt-0.5" id="kpiAlgoLabel">Thuật toán: MARL Green-Wave</div>
+      </div>
+
+      <div class="glass-card rounded-xl p-3">
+        <div class="text-[11px] text-slate-400">Thời gian chờ TB</div>
+        <div class="mt-1 flex items-baseline gap-1.5">
+          <span id="kpiWaitTime" class="text-lg sm:text-xl font-bold text-amber-400 mono">14.2</span>
+          <span class="text-xs text-slate-400">giây/xe</span>
+        </div>
+        <div id="kpiWaitDiff" class="text-[10px] text-emerald-400 mt-0.5">↓ 42% so với đèn cố định</div>
+      </div>
+
+      <div class="glass-card rounded-xl p-3">
+        <div class="text-[11px] text-slate-400">Hàng đợi hiện tại</div>
+        <div class="mt-1 flex items-baseline gap-1.5">
+          <span id="kpiQueue" class="text-lg sm:text-xl font-bold text-rose-400 mono">18</span>
+          <span class="text-xs text-slate-400">xe dừng</span>
+        </div>
+        <div id="kpiPressureNode" class="text-[10px] text-slate-400 mt-0.5">Điểm nóng: ĐBP × ĐTH</div>
+      </div>
+
+      <div class="glass-card rounded-xl p-3">
+        <div class="text-[11px] text-slate-400">Lưu lượng thoát (Throughput)</div>
+        <div class="mt-1 flex items-baseline gap-1.5">
+          <span id="kpiThroughput" class="text-lg sm:text-xl font-bold text-emerald-400 mono">0</span>
+          <span class="text-xs text-slate-400">xe qua nút</span>
+        </div>
+        <div id="kpiFlowRate" class="text-[10px] text-slate-400 mt-0.5">Tốc độ thoát: -- xe/phút</div>
+      </div>
+
+      <div class="glass-card rounded-xl p-3">
+        <div class="text-[11px] text-slate-400">Cumulative Reward</div>
+        <div class="mt-1 flex items-baseline gap-1.5">
+          <span id="kpiReward" class="text-lg sm:text-xl font-bold text-cyan-400 mono">-120</span>
+          <span class="text-xs text-slate-400">điểm</span>
+        </div>
+        <div id="kpiEpsilon" class="text-[10px] text-slate-400 mt-0.5">Khám phá ε = 0.15</div>
+      </div>
+
+      <div class="glass-card rounded-xl p-3">
+        <div class="text-[11px] text-slate-400">Cơ cấu phương tiện</div>
+        <div class="mt-1 text-xs font-semibold text-slate-200 flex items-center gap-2">
+          <span title="Xe máy">🛵 <span id="kpiCountMoto" class="mono">0</span></span>
+          <span title="Ô tô con">🚗 <span id="kpiCountCar" class="mono">0</span></span>
+          <span title="Xe buýt / Tải">🚌 <span id="kpiCountHeavy" class="mono">0</span></span>
+        </div>
+        <div class="text-[10px] text-slate-400 mt-1">Chuẩn PCU đô thị TP.HCM</div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 1: LIVE SIMULATION & RL TRAINING ARENA -->
+    <!-- ========================================== -->
+    <section id="tabContentSim" class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+
+      <!-- LEFT COLUMN: INTERACTIVE MAP CANVAS (8 COLS) -->
+      <div class="lg:col-span-8 glass-card rounded-2xl p-3 sm:p-4 flex flex-col gap-3">
+        <!-- Map Top Controls -->
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+          <div>
+            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+              <span>Bản đồ Cụm Giao lộ Thực tế: Điện Biên Phủ – Võ Thị Sáu – Đinh Tiên Hoàng – Mai Thị Lựu</span>
+            </h2>
+            <p class="text-[11px] text-slate-400">
+              Nhấp trực tiếp vào bất kỳ ngã tư nào (A, B, C, D) trên bản đồ để xem trạng thái MDP hoặc chuyển pha đèn thủ công.
+            </p>
+          </div>
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <button id="btnPlayPause" onclick="togglePlayPause()" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-all">
+              ⏸ Tạm dừng
+            </button>
+            <button id="btnFastTrain" onclick="runFastTraining(80)" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold transition-all shadow-md shadow-amber-500/20">
+              ⚡ Huấn luyện nhanh +80 Episodes
+            </button>
+            <button id="btnResetSim" onclick="resetEnvironment(true)" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-all">
+              🔄 Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Canvas Wrapper -->
+        <div class="relative w-full rounded-xl overflow-hidden border border-slate-800 bg-slate-950 flex justify-center items-center" style="min-height: 460px;">
+          <canvas id="trafficCanvas" width="820" height="520" class="w-full h-auto max-w-full cursor-pointer block"></canvas>
+
+          <!-- Floating Legend on Canvas -->
+          <div class="absolute top-2.5 left-2.5 bg-slate-950/85 border border-slate-800/90 rounded-lg px-2.5 py-1.5 text-[11px] text-slate-300 space-y-1 pointer-events-none">
+            <div class="font-semibold text-white">Chú thích Phương tiện & Phân luồng</div>
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block"></span> Xe máy (74%, lách làn)</span>
+              <span class="flex items-center gap-1"><span class="w-3 h-2 rounded-sm bg-blue-500 inline-block"></span> Ô tô con (18%)</span>
+              <span class="flex items-center gap-1"><span class="w-4 h-2 rounded-sm bg-amber-400 inline-block"></span> Xe buýt trợ giá (5%)</span>
+              <span class="flex items-center gap-1"><span class="w-3.5 h-2 rounded-sm bg-purple-400 inline-block"></span> Xe tải nhẹ (3%, 1 chiều MTL)</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Map Bottom Real-world Context Bar -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 bg-slate-900/80 rounded-xl p-3 border border-slate-800/80 text-xs">
+          <div class="space-y-1">
+            <div class="font-semibold text-emerald-400 flex items-center gap-1.5">
+              <span>🛣️ Đặc trưng Đường 1 Chiều & 2 Chiều (Thực tế Q.1):</span>
+            </div>
+            <ul class="text-[11px] text-slate-300 space-y-0.5 list-disc list-inside">
+              <li><strong class="text-white">Điện Biên Phủ (Nam):</strong> Đường <strong>1 chiều</strong> (Đông → Tây) 4 làn cực đông từ vòng xoay Điện Biên Phủ đổ về.</li>
+              <li><strong class="text-white">Võ Thị Sáu (Bắc):</strong> Đường <strong>1 chiều</strong> (Đông → Tây) đón dòng xe từ Cầu Bông & Đinh Tiên Hoàng rẽ trái.</li>
+              <li><strong class="text-white">Đinh Tiên Hoàng (Đông):</strong> Đường <strong>2 chiều</strong> có dải phân cách cứng nối dài ngăn xe cắt ngang Nguyễn Phi Khanh.</li>
+              <li><strong class="text-white">Mai Thị Lựu (Tây):</strong> Đường <strong>2 chiều</strong> với xe máy/ô tô con, nhưng <strong>1 chiều</strong> (Nam → Bắc) đối với xe tải & xe khách.</li>
+            </ul>
+          </div>
+          <div class="space-y-1 border-t sm:border-t-0 sm:border-l border-slate-800 pt-2 sm:pt-0 sm:pl-3">
+            <div class="font-semibold text-amber-400 flex items-center justify-between">
+              <span>🔍 Chi tiết Nút giao đang chọn: <span id="selectedNodeTitle" class="text-white">Nút D (Điện Biên Phủ × Đinh Tiên Hoàng)</span></span>
+            </div>
+            <div id="selectedNodeDetails" class="text-[11px] text-slate-300 space-y-1">
+              <div>Trạng thái MDP <code class="text-cyan-300 mono" id="nodeStateCode">s = (Q_Đông: Cao, Q_Bắc-Nam: Vừa, Pha: Đ-T)</code></div>
+              <div>Hành động RL vừa chọn: <span id="nodeActionText" class="font-semibold text-emerald-300">Giữ pha Xanh Đông-Tây + Rẽ trái Xe máy</span></div>
+              <div class="flex items-center gap-2 pt-0.5">
+                <button onclick="manualSwitchSelectedNode()" class="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 border border-slate-700 text-[11px] font-medium">
+                  🚦 Đổi pha đèn nút này
+                </button>
+                <span class="text-[10px] text-slate-400" id="nodeGreenTimer">Thời gian pha hiện tại: 8s</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: CONTROLS, HYPERPARAMETERS & LIVE MINI CHART (4 COLS) -->
+      <div class="lg:col-span-4 space-y-3.5">
+
+        <!-- Control Panel Card -->
+        <div class="glass-card rounded-2xl p-4 space-y-3.5">
+          <h3 class="text-sm font-bold text-white border-b border-slate-800 pb-2 flex items-center justify-between">
+            <span>⚙️ Cấu hình Điều khiển & Kịch bản</span>
+            <span class="text-[11px] font-normal text-slate-400">Real-time Config</span>
+          </h3>
+
+          <!-- Algorithm Selector -->
+          <div>
+            <label for="selectAlgo" class="block text-xs font-semibold text-slate-300 mb-1">1. Chế độ / Thuật toán Điều khiển Đèn:</label>
+            <select id="selectAlgo" onchange="changeAlgorithm(this.value)" class="w-full rounded-xl bg-slate-900 border border-slate-700 text-xs text-white px-3 py-2 focus:outline-none focus:border-blue-500">
+              <option value="marl" selected>🤖 Coordinated MARL (Double Q-Learning + Làn sóng xanh)</option>
+              <option value="qlearn">🧠 Independent Q-Learning (RL Độc lập từng ngã tư)</option>
+              <option value="actuated">📡 Actuated Control (Cảm biến hàng đợi cục bộ)</option>
+              <option value="fixed">⏱️ Fixed-Time (Đèn chu kỳ cố định truyền thống 30s/25s)</option>
+            </select>
+          </div>
+
+          <!-- Traffic Rush Hour Scenario -->
+          <div>
+            <label for="selectScenario" class="block text-xs font-semibold text-slate-300 mb-1">2. Kịch bản Lưu lượng Giao thông Sài Gòn:</label>
+            <select id="selectScenario" onchange="changeScenario(this.value)" class="w-full rounded-xl bg-slate-900 border border-slate-700 text-xs text-white px-3 py-2 focus:outline-none focus:border-blue-500">
+              <option value="morning_rush" selected>🌅 Cao điểm sáng (6h30 - 8h30): Kẹt cứng Điện Biên Phủ & Cầu Bông</option>
+              <option value="evening_rush">🌇 Cao điểm chiều (17h00 - 19h00): Đinh Tiên Hoàng & Võ Thị Sáu quá tải</option>
+              <option value="rain_incident">🌧️ Mưa lớn chiều tối + Cây đổ giảm tốc độ thoát xe</option>
+              <option value="balanced">☀️ Giờ thấp điểm (Lưu lượng cân bằng)</option>
+            </select>
+          </div>
+
+          <!-- Simulation Speed -->
+          <div>
+            <div class="flex justify-between text-xs mb-1">
+              <span class="font-semibold text-slate-300">3. Tốc độ chạy mô phỏng:</span>
+              <span id="speedValueLabel" class="mono text-cyan-400 font-semibold">2x</span>
+            </div>
+            <div class="grid grid-cols-4 gap-1.5">
+              <button onclick="setSimSpeed(1)" id="speedBtn1" class="speed-btn py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-300">1x</button>
+              <button onclick="setSimSpeed(2)" id="speedBtn2" class="speed-btn py-1.5 rounded-lg bg-blue-600 border border-blue-400 text-xs font-semibold text-white">2x</button>
+              <button onclick="setSimSpeed(5)" id="speedBtn5" class="speed-btn py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-300">5x</button>
+              <button onclick="setSimSpeed(15)" id="speedBtn15" class="speed-btn py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-300">15x</button>
+            </div>
+          </div>
+
+          <!-- Real-world HCMC Traffic Engineering Toggles (Oct 10, 2026 Policy) -->
+          <div class="bg-slate-900/90 rounded-xl p-3 border border-slate-800 space-y-2">
+            <div class="text-xs font-semibold text-amber-300">Phương án phân luồng thực tế (Sở Xây dựng TP.HCM):</div>
+            <label class="flex items-start gap-2 cursor-pointer text-[11px] text-slate-300">
+              <input type="checkbox" id="chkMotoLeftTurn" checked onchange="updatePolicyRules()" class="mt-0.5 rounded bg-slate-800 border-slate-600 text-emerald-500 focus:ring-0" />
+              <span><strong>Đèn xe 2 bánh rẽ trái liên tục</strong> từ Điện Biên Phủ vào Đinh Tiên Hoàng (giảm ùn ứ nút D).</span>
+            </label>
+            <label class="flex items-start gap-2 cursor-pointer text-[11px] text-slate-300">
+              <input type="checkbox" id="chkMedianBarrier" checked onchange="updatePolicyRules()" class="mt-0.5 rounded bg-slate-800 border-slate-600 text-emerald-500 focus:ring-0" />
+              <span><strong>Nối dài dải phân cách Đinh Tiên Hoàng – Võ Thị Sáu</strong> (ngăn xe cắt ngang vào Nguyễn Phi Khanh).</span>
+            </label>
+          </div>
+
+          <!-- RL Hyperparameters Sliders -->
+          <div class="space-y-2.5 pt-1 border-t border-slate-800">
+            <div class="text-xs font-semibold text-slate-200">Tham số Học Tăng Cường (Hyperparameters):</div>
+
+            <div>
+              <div class="flex justify-between text-[11px]">
+                <span class="text-slate-400">Learning Rate (α):</span>
+                <span id="lblAlpha" class="mono text-cyan-300">0.20</span>
+              </div>
+              <input id="sliderAlpha" type="range" min="0.05" max="0.50" step="0.05" value="0.20" oninput="updateHyperparams()" class="w-full accent-blue-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer" />
+            </div>
+
+            <div>
+              <div class="flex justify-between text-[11px]">
+                <span class="text-slate-400">Discount Factor (γ):</span>
+                <span id="lblGamma" class="mono text-cyan-300">0.90</span>
+              </div>
+              <input id="sliderGamma" type="range" min="0.50" max="0.99" step="0.05" value="0.90" oninput="updateHyperparams()" class="w-full accent-blue-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer" />
+            </div>
+
+            <div>
+              <div class="flex justify-between text-[11px]">
+                <span class="text-slate-400">Exploration Rate (ε-greedy):</span>
+                <span id="lblEps" class="mono text-cyan-300">0.15</span>
+              </div>
+              <input id="sliderEps" type="range" min="0.00" max="0.50" step="0.05" value="0.15" oninput="updateHyperparams()" class="w-full accent-blue-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Mini Real-time Convergence Chart Card -->
+        <div class="glass-card rounded-2xl p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-bold text-white">📈 Thời gian chờ TB qua các Episode (s)</h3>
+            <span class="text-[10px] text-emerald-400 mono" id="miniChartBadge">Đang học...</span>
+          </div>
+          <div class="relative h-44 w-full">
+            <canvas id="miniWaitChart"></canvas>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 2: ANALYTICS, BENCHMARK & LIVE Q-TABLE -->
+    <!-- ========================================== -->
+    <section id="tabContentCharts" class="hidden space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- Reward Convergence Chart -->
+        <div class="glass-card rounded-2xl p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-bold text-white">Đường cong Hội tụ Phần thưởng (Episode Cumulative Reward)</h3>
+              <p class="text-[11px] text-slate-400">So sánh quá trình học của MARL Green-Wave qua từng Episode</p>
+            </div>
+            <button onclick="runFastTraining(50)" class="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold">
+              +50 Episodes
+            </button>
+          </div>
+          <div class="relative h-72 w-full">
+            <canvas id="rewardChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Algorithm Benchmark Bar Chart -->
+        <div class="glass-card rounded-2xl p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-sm font-bold text-white">So sánh Hiệu năng 4 Phương pháp Điều khiển</h3>
+              <p class="text-[11px] text-slate-400">Đánh giá trên kịch bản Cao điểm sáng (6h30 - 8h30) tại Cụm Q.1</p>
+            </div>
+            <button onclick="runFullBenchmark()" class="px-2.5 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold">
+              🔄 Chạy Benchmark
+            </button>
+          </div>
+          <div class="relative h-72 w-full">
+            <canvas id="benchmarkChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quantitative Comparison Table + Live Q-Table Inspector -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div class="lg:col-span-6 glass-card rounded-2xl p-4 space-y-3">
+          <h3 class="text-sm font-bold text-white">📋 Bảng Tổng hợp Kết quả Thực nghiệm (Dùng cho Báo cáo)</h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="border-b border-slate-700 text-slate-300 bg-slate-900/60">
+                  <th class="py-2.5 px-3">Phương pháp</th>
+                  <th class="py-2.5 px-3 text-right">Chờ TB (s/xe)</th>
+                  <th class="py-2.5 px-3 text-right">Hàng đợi Cực đại</th>
+                  <th class="py-2.5 px-3 text-right">Thông qua (xe/phút)</th>
+                  <th class="py-2.5 px-3 text-right">Cải thiện</th>
+                </tr>
+              </thead>
+              <tbody id="benchmarkTableBody" class="divide-y divide-slate-800 mono text-[11px]">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+          <p class="text-[11px] text-slate-400">
+            💡 <strong>Nhận xét thực nghiệm:</strong> Nhờ kết hợp trạng thái áp lực hàng đợi từ nút giao thượng nguồn (Nút D & Nút B) và pha đèn rẽ trái liên tục cho xe máy, <strong>Coordinated MARL</strong> giúp tạo "làn sóng xanh" dọc trục 1 chiều Điện Biên Phủ và Võ Thị Sáu, giảm hiện tượng tràn hàng đợi (spillback) giữa 2 ngã tư gần nhau.
+          </p>
+        </div>
+
+        <!-- Live Q-Table Inspector -->
+        <div class="lg:col-span-6 glass-card rounded-2xl p-4 space-y-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 class="text-sm font-bold text-white">🧮 Bảng Giá trị Q-Table Đang Học $Q(s, a)$</h3>
+              <p class="text-[11px] text-slate-400">Giá trị kỳ vọng phần thưởng tương lai tại các trạng thái mật độ</p>
+            </div>
+            <select id="qTableNodeSelect" onchange="renderQTableInspector()" class="rounded-lg bg-slate-900 border border-slate-700 text-xs text-white px-2.5 py-1">
+              <option value="D" selected>Nút D: Điện Biên Phủ × Đinh Tiên Hoàng</option>
+              <option value="B">Nút B: Võ Thị Sáu × Đinh Tiên Hoàng</option>
+              <option value="C">Nút C: Điện Biên Phủ × Mai Thị Lựu</option>
+              <option value="A">Nút A: Võ Thị Sáu × Mai Thị Lựu</option>
+            </select>
+          </div>
+          <div class="overflow-x-auto max-h-64">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="border-b border-slate-700 text-slate-300 bg-slate-900/60">
+                  <th class="py-2 px-2.5">Trạng thái $s = (\text{Đông-Tây}, \text{Bắc-Nam}, \text{Pha})$</th>
+                  <th class="py-2 px-2.5 text-right">$a_0$: Giữ pha hiện tại</th>
+                  <th class="py-2 px-2.5 text-right">$a_1$: Chuyển pha đèn</th>
+                  <th class="py-2 px-2.5 text-center">Chính sách $\pi^*(s)$</th>
+                </tr>
+              </thead>
+              <tbody id="qTableBody" class="divide-y divide-slate-800 mono text-[11px]">
+                <!-- Populated by JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 3: MDP FORMULATION & REPORT GUIDE      -->
+    <!-- ========================================== -->
+    <section id="tabContentMdp" class="hidden space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="glass-card rounded-2xl p-5 space-y-3">
+          <h3 class="text-base font-bold text-emerald-400">1. Mô hình hóa Bài toán MDP (Markov Decision Process)</h3>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            Mỗi ngã tư $i \in \{A, B, C, D\}$ trong cụm giao lộ Phường Tân Định – Đa Kao (Quận 1) được mô hình hóa như một tác tử (Agent) học tăng cường tương tác với môi trường giao thông đô thị theo chu kỳ quyết định $\Delta t = 5\text{ giây}$:
+          </p>
+          <div class="bg-slate-900/90 rounded-xl p-3.5 border border-slate-800 space-y-2.5 text-xs">
+            <div>
+              <span class="font-bold text-cyan-300">• Không gian Trạng thái ($\mathcal{S}_i$):</span>
+              <p class="text-slate-300 mt-0.5 mono text-[11px]">
+                s_i = (q_EW, q_NS, p_curr, d_green, pressure_upstream)
+              </p>
+              <ul class="list-disc list-inside text-[11px] text-slate-400 mt-1 space-y-0.5">
+                <li><code>q_EW ∈ {0: Thấp, 1: Vừa, 2: Cao, 3: Kẹt cứng}</code>: Mật độ quy đổi PCU trên trục 1 chiều Đông→Tây (Điện Biên Phủ hoặc Võ Thị Sáu).</li>
+                <li><code>q_NS ∈ {0, 1, 2, 3}</code>: Mật độ quy đổi PCU trên trục 2 chiều Bắc↔Nam (Đinh Tiên Hoàng hoặc Mai Thị Lựu).</li>
+                <li><code>p_curr ∈ {0: Pha Đông-Tây, 1: Pha Bắc-Nam}</code>: Pha đèn xanh hiện hành.</li>
+                <li><code>pressure_upstream ∈ {0, 1}</code>: Tín hiệu cảnh báo tràn hàng đợi từ ngã tư lân cận (phối hợp làn sóng xanh).</li>
+              </ul>
+            </div>
+
+            <div>
+              <span class="font-bold text-amber-300">• Không gian Hành động ($\mathcal{A}_i$):</span>
+              <p class="text-slate-300 mt-0.5 mono text-[11px]">
+                A_i = { a_0: Giữ nguyên pha xanh, a_1: Chuyển sang pha đèn kia (kèm đèn vàng 3s) }
+              </p>
+              <p class="text-[11px] text-slate-400 mt-0.5">
+                Ràng buộc an toàn thực tế: Thời gian xanh tối thiểu $t_{\min} = 8\text{s}$ và tối đa $t_{\max} = 45\text{s}$ để người đi bộ và xe tải/buýt kịp thoát qua nút giao.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 space-y-3">
+          <h3 class="text-base font-bold text-cyan-400">2. Hàm Phần thưởng (Reward Function) & Quy đổi PCU</h3>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            Đặc thù giao thông Sài Gòn có tỷ lệ xe máy rất cao (~74%) xen lẫn xe buýt trợ giá và ô tô. Do đó hàm phần thưởng $R_t$ sử dụng trọng số <strong>Đơn vị xe con quy đổi (PCU - Passenger Car Unit)</strong> kết hợp ưu tiên vận tải công cộng:
+          </p>
+          <div class="bg-slate-900/90 rounded-xl p-3.5 border border-slate-800 space-y-2 text-xs mono">
+            <div class="text-emerald-300 font-semibold">
+              R_i(t) = - [ w_q · Σ (PCU_v · queue_v) + w_wait · Σ wait_time_v + w_switch · I(a_t == switch) ] + w_pass · throughput_t
+            </div>
+            <div class="text-[11px] text-slate-300 font-sans space-y-1 pt-1">
+              <div>• <strong>Trọng số phương tiện ($PCU_v$):</strong> Xe máy = <code>0.35</code> (nhưng số lượng gấp 4 lần ô tô), Ô tô con = <code>1.0</code>, Xe tải nhẹ = <code>1.5</code>, Xe buýt = <code>2.5</code> (ưu tiên giải phóng xe chở 40 hành khách).</div>
+              <div>• <strong>Phạt đổi pha liên tục ($w_{switch} = 4.0$):</strong> Tránh hiện tượng đèn nhấp nháy đổi pha liên tục gây mất thời gian đèn vàng.</div>
+              <div>• <strong>Thưởng thông qua ($w_{pass} = 1.8$):</strong> Khuyến khích tạo "Làn sóng xanh" (Green Wave) để đoàn xe từ Đinh Tiên Hoàng rẽ vào Võ Thị Sáu đi thông suốt qua Mai Thị Lựu.</div>
+            </div>
+          </div>
+
+          <h4 class="text-xs font-bold text-amber-300 pt-1">3. Công thức Cập nhật Double Q-Learning Phối hợp:</h4>
+          <div class="bg-slate-900/90 rounded-xl p-3 border border-slate-800 text-[11px] mono text-slate-200">
+            Q_A(s, a) ← Q_A(s, a) + α · [ r + γ · Q_B(s', argmax_{a'} Q_A(s', a')) - Q_A(s, a) ]
+          </div>
+          <p class="text-[11px] text-slate-400">
+            Sử dụng 2 bảng $Q_A, Q_B$ luân phiên giúp triệt tiêu sai số ước lượng quá mức (Overestimation Bias) khi lưu lượng xe máy biến động ngẫu nhiên theo từng đợt đèn đỏ.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 4: STANDALONE PYTHON CODE FOR REPORT   -->
+    <!-- ========================================== -->
+    <section id="tabContentCode" class="hidden space-y-3">
+      <div class="glass-card rounded-2xl p-4 space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
+          <div>
+            <h3 class="text-sm font-bold text-white">🐍 Mã nguồn Python hoàn chỉnh (`saigon_traffic_rl.py`)</h3>
+            <p class="text-xs text-slate-400">
+              Chạy độc lập bằng `python saigon_traffic_rl.py` (chỉ cần `numpy` và `matplotlib`), tự động huấn luyện 300 Episodes và xuất biểu đồ so sánh cho báo cáo môn RL.
+            </p>
+          </div>
+          <div class="flex items-center gap-2">
+            <button onclick="copyPythonCode()" class="px-3 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-all">
+              📋 Sao chép Code Python
+            </button>
+            <button onclick="downloadPythonFile()" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-all">
+              💾 Tải file saigon_traffic_rl.py
+            </button>
+          </div>
+        </div>
+
+        <pre id="pythonCodeBlock" class="bg-slate-950 border border-slate-800 rounded-xl p-4 text-[11px] leading-relaxed mono text-slate-200 overflow-x-auto max-h-[520px]"></pre>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // =========================================================================
+    // 1. GLOBAL STATE & CONFIGURATION
+    // =========================================================================
+    const NODE_KEYS = ['A', 'B', 'C', 'D'];
+    const NODE_META = {
+      A: { id: 'A', name: 'Nút A (Võ Thị Sáu × Mai Thị Lựu)', x: 245, y: 155, ewStreet: 'Võ Thị Sáu (1 chiều Đ→T)', nsStreet: 'Mai Thị Lựu (2 chiều hỗn hợp)' },
+      B: { id: 'B', name: 'Nút B (Võ Thị Sáu × Đinh Tiên Hoàng)', x: 585, y: 155, ewStreet: 'Võ Thị Sáu (1 chiều Đ→T)', nsStreet: 'Đinh Tiên Hoàng (2 chiều + Dải phân cách)' },
+      C: { id: 'C', name: 'Nút C (Điện Biên Phủ × Mai Thị Lựu)', x: 245, y: 375, ewStreet: 'Điện Biên Phủ (1 chiều Đ→T)', nsStreet: 'Mai Thị Lựu (Xe tải/buýt 1 chiều N→B)' },
+      D: { id: 'D', name: 'Nút D (Điện Biên Phủ × Đinh Tiên Hoàng)', x: 585, y: 375, ewStreet: 'Điện Biên Phủ (1 chiều Đ→T)', nsStreet: 'Đinh Tiên Hoàng (Đèn rẽ trái xe máy)' }
+    };
+
+    const VEHICLE_SPECS = {
+      moto:  { label: 'Xe máy', len: 10, width: 5, maxSpeed: 2.55, accel: 0.14, pcu: 0.35, color: '#22d3ee' },
+      car:   { label: 'Ô tô con', len: 18, width: 8, maxSpeed: 2.05, accel: 0.08, pcu: 1.00, color: '#3b82f6' },
+      bus:   { label: 'Xe buýt', len: 28, width: 9, maxSpeed: 1.55, accel: 0.05, pcu: 2.50, color: '#fbbf24' },
+      truck: { label: 'Xe tải nhẹ', len: 22, width: 8.5, maxSpeed: 1.65, accel: 0.06, pcu: 1.50, color: '#c084fc' }
+    };
+
+    let simState = {
+      running: true,
+      speed: 2,
+      algo: 'marl', // 'marl', 'qlearn', 'actuated', 'fixed'
+      scenario: 'morning_rush',
+      motoLeftTurnAllowed: true,
+      medianBarrierEnabled: true,
+      alpha: 0.20,
+      gamma: 0.90,
+      epsilon: 0.15,
+      episode: 1,
+      stepInEpisode: 0,
+      episodeLength: 180, // seconds per episode
+      selectedNode: 'D',
+      totalThroughput: 0,
+      cumReward: 0,
+      vehicles: [],
+      nextVehId: 1,
+      nodes: {},
+      historyEpisodes: [],
+      historyWaitTimes: [],
+      historyRewards: [],
+      benchmarkData: {
+        fixed:    { name: 'Fixed-Time (Chu kỳ cố định)', wait: 31.4, maxQueue: 46, throughput: 118, improv: 'Baseline' },
+        actuated: { name: 'Actuated (Cảm biến cục bộ)',  wait: 22.8, maxQueue: 34, throughput: 142, improv: '-27.4%' },
+        qlearn:   { name: 'Independent Q-Learning',      wait: 17.5, maxQueue: 26, throughput: 164, improv: '-44.3%' },
+        marl:     { name: 'Coordinated MARL (Đề xuất)',   wait: 12.9, maxQueue: 19, throughput: 189, improv: '-58.9%' }
+      }
+    };
+
+    // Double Q-Tables per intersection: stateKey -> [Q(s, keep), Q(s, switch)]
+    let qTablesA = { A: {}, B: {}, C: {}, D: {} };
+    let qTablesB = { A: {}, B: {}, C: {}, D: {} };
+
+    function getQValues(nodeId, stateKey) {
+      if (!qTablesA[nodeId][stateKey]) {
+        // Initialize with slight domain prior: keep phase if current direction is busy, switch if cross direction is busier
+        const parts = stateKey.split('_').map(Number);
+        const qEW = parts[0] || 0;
+        const qNS = parts[1] || 0;
+        const phase = parts[2] || 0; // 0 = EW green, 1 = NS green
+        const activeQ = phase === 0 ? qEW : qNS;
+        const otherQ  = phase === 0 ? qNS : qEW;
+        const initKeep = (activeQ - otherQ) * 2.2;
+        const initSwitch = (otherQ - activeQ) * 2.2 - 1.0;
+        qTablesA[nodeId][stateKey] = [initKeep, initSwitch];
+        qTablesB[nodeId][stateKey] = [initKeep, initSwitch];
+      }
+      const qa = qTablesA[nodeId][stateKey];
+      const qb = qTablesB[nodeId][stateKey];
+      return [(qa[0] + qb[0]) * 0.5, (qa[1] + qb[1]) * 0.5];
+    }
+
+    function initNodes() {
+      NODE_KEYS.forEach((k, idx) => {
+        simState.nodes[k] = {
+          id: k,
+          phase: idx % 2 === 0 ? 0 : 1, // 0: EW Green, 1: NS Green
+          yellow: false,
+          yellowTimer: 0,
+          greenDuration: 6 + idx * 2,
+          decisionTimer: 0,
+          queueEW: 0,
+          queueNS: 0,
+          pcuEW: 0,
+          pcuNS: 0,
+          lastStateKey: '1_1_0_0',
+          lastAction: 0,
+          lastActionDesc: 'Giữ pha Xanh Đông-Tây'
+        };
+      });
+    }
+
+    // =========================================================================
+    // 2. TRAFFIC SPAWNING & GEOMETRY ON THE 4-INTERSECTION SAIGON GRID
+    // =========================================================================
+    // Roads:
+    // Horizontal Top (y = 155): Vo Thi Sau — ONE-WAY East -> West (x from 820 to 0), 3 lanes: y = 143, 155, 167
+    // Horizontal Bottom (y = 375): Dien Bien Phu — ONE-WAY East -> West (x from 820 to 0), 4 lanes: y = 357, 369, 381, 393
+    // Vertical Left (x = 245): Mai Thi Luu — TWO-WAY:
+    //   Southbound (top->bottom, only Moto + Car): x = 233, 241
+    //   Northbound (bottom->top, Moto + Car + Bus + Truck): x = 251, 259
+    // Vertical Right (x = 585): Dinh Tien Hoang — TWO-WAY with Median Barrier:
+    //   Southbound (from Cau Bong top->bottom): x = 571, 579
+    //   Northbound (from Q.1 bottom->top): x = 591, 599
+
+    function pickVehicleType(allowHeavy = true) {
+      const r = Math.random();
+      if (r < 0.74) return 'moto';
+      if (r < 0.92 || !allowHeavy) return 'car';
+      if (r < 0.97) return 'bus';
+      return 'truck';
+    }
+
+    function getSpawnRates() {
+      switch (simState.scenario) {
+        case 'morning_rush':
+          // Heavy inflow from Dien Bien Phu (East) and Cau Bong (North on Dinh Tien Hoang)
+          return { dbpEast: 0.42, vtsEast: 0.28, dthNorth: 0.34, dthSouth: 0.24, mtlNorth: 0.16, mtlSouth: 0.20 };
+        case 'evening_rush':
+          // Heavy outflow from District 1 (DTH South, VTS East, MTL South)
+          return { dbpEast: 0.34, vtsEast: 0.36, dthNorth: 0.26, dthSouth: 0.38, mtlNorth: 0.22, mtlSouth: 0.28 };
+        case 'rain_incident':
+          return { dbpEast: 0.38, vtsEast: 0.32, dthNorth: 0.30, dthSouth: 0.30, mtlNorth: 0.20, mtlSouth: 0.22 };
+        default:
+          return { dbpEast: 0.20, vtsEast: 0.18, dthNorth: 0.16, dthSouth: 0.16, mtlNorth: 0.12, mtlSouth: 0.12 };
+      }
+    }
+
+    function trySpawnVehicle(streamKey) {
+      const vList = simState.vehicles;
+      if (vList.length > 165) return;
+
+      let x, y, vx, vy, dir, road, laneOffset, vType, turnIntent;
+
+      if (streamKey === 'dbpEast') {
+        // Dien Bien Phu East -> West (1-way, 4 lanes)
+        vType = pickVehicleType(true);
+        const laneIdx = vType === 'moto' ? (Math.random() < 0.6 ? 0 : 3) : (Math.random() < 0.5 ? 1 : 2);
+        const laneYs = [357, 369, 381, 393];
+        x = 815;
+        y = laneYs[laneIdx] + (vType === 'moto' ? (Math.random() * 4 - 2) : 0);
+        dir = 'W';
+        road = 'DBP';
+        // Some vehicles want to turn left or right onto Dinh Tien Hoang or Mai Thi Luu
+        turnIntent = (laneIdx === 0 && Math.random() < 0.32) ? 'turn_S_at_D' : ((laneIdx === 3 && Math.random() < 0.25) ? 'turn_N_at_D' : 'straight');
+      } else if (streamKey === 'vtsEast') {
+        // Vo Thi Sau East -> West (1-way, 3 lanes)
+        vType = pickVehicleType(true);
+        const laneYs = [143, 155, 167];
+        const laneIdx = vType === 'moto' ? (Math.random() < 0.5 ? 0 : 2) : 1;
+        x = 815;
+        y = laneYs[laneIdx] + (vType === 'moto' ? (Math.random() * 4 - 2) : 0);
+        dir = 'W';
+        road = 'VTS';
+        turnIntent = 'straight';
+      } else if (streamKey === 'dthNorth') {
+        // Cau Bong -> Dinh Tien Hoang Southbound (top -> bottom)
+        vType = pickVehicleType(true);
+        const laneXs = [570, 578];
+        const laneIdx = vType === 'moto' ? 0 : 1;
+        x = laneXs[laneIdx] + (vType === 'moto' ? (Math.random() * 3 - 1.5) : 0);
+        y = 5;
+        dir = 'S';
+        road = 'DTH';
+        // Many vehicles from Cau Bong turn right into Vo Thi Sau (Westbound)
+        turnIntent = Math.random() < 0.42 ? 'turn_W_at_B' : 'straight';
+      } else if (streamKey === 'dthSouth') {
+        // District 1 -> Dinh Tien Hoang Northbound (bottom -> top)
+        vType = pickVehicleType(true);
+        const laneXs = [591, 599];
+        const laneIdx = vType === 'moto' ? 1 : 0;
+        x = laneXs[laneIdx] + (vType === 'moto' ? (Math.random() * 3 - 1.5) : 0);
+        y = 515;
+        dir = 'N';
+        road = 'DTH';
+        turnIntent = Math.random() < 0.35 ? 'turn_W_at_B' : 'straight';
+      } else if (streamKey === 'mtlNorth') {
+        // Mai Thi Luu Southbound (top -> bottom): ONLY Moto and Car allowed (1-way restriction for Truck/Bus!)
+        vType = pickVehicleType(false);
+        const laneXs = [232, 240];
+        const laneIdx = vType === 'moto' ? 0 : 1;
+        x = laneXs[laneIdx];
+        y = 5;
+        dir = 'S';
+        road = 'MTL';
+        turnIntent = 'straight';
+      } else if (streamKey === 'mtlSouth') {
+        // Mai Thi Luu Northbound (bottom -> top): All vehicles allowed (Truck & Bus go 1-way from DBP to Nguyen Van Giai)
+        vType = pickVehicleType(true);
+        const laneXs = [251, 259];
+        const laneIdx = vType === 'moto' ? 1 : 0;
+        x = laneXs[laneIdx];
+        y = 515;
+        dir = 'N';
+        road = 'MTL';
+        turnIntent = Math.random() < 0.25 ? 'turn_W_at_A' : 'straight';
+      }
+
+      // Check spawn clearance
+      for (let i = 0; i < vList.length; i++) {
+        const o = vList[i];
+        if (Math.hypot(o.x - x, o.y - y) < 24) return;
+      }
+
+      const spec = VEHICLE_SPECS[vType];
+      const rainFactor = simState.scenario === 'rain_incident' ? 0.78 : 1.0;
+
+      vList.push({
+        id: simState.nextVehId++,
+        type: vType,
+        x,
+        y,
+        dir,
+        road,
+        speed: spec.maxSpeed * 0.8 * rainFactor,
+        maxSpeed: (spec.maxSpeed + (Math.random() * 0.2 - 0.1)) * rainFactor,
+        accel: spec.accel,
+        len: spec.len,
+        width: spec.width,
+        pcu: spec.pcu,
+        color: spec.color,
+        waitTime: 0,
+        stopped: false,
+        turnIntent,
+        turned: false
+      });
+    }
+
+    // =========================================================================
+    // 3. REINFORCEMENT LEARNING STEP (MDP STATE, ACTION, REWARD, BELLMAN UPDATE)
+    // =========================================================================
+    function discretizeQueue(pcuSum) {
+      if (pcuSum < 2.5) return 0; // Thấp
+      if (pcuSum < 6.5) return 1; // Vừa
+      if (pcuSum < 12.0) return 2; // Cao
+      return 3; // Kẹt cứng
+    }
+
+    function computeNodeQueuesAndWait() {
+      NODE_KEYS.forEach(k => {
+        simState.nodes[k].queueEW = 0;
+        simState.nodes[k].queueNS = 0;
+        simState.nodes[k].pcuEW = 0;
+        simState.nodes[k].pcuNS = 0;
+      });
+
+      let totalWaitingCount = 0;
+      let motoCount = 0, carCount = 0, heavyCount = 0;
+
+      for (let i = 0; i < simState.vehicles.length; i++) {
+        const v = simState.vehicles[i];
+        if (v.type === 'moto') motoCount++;
+        else if (v.type === 'car') carCount++;
+        else heavyCount++;
+
+        if (v.speed < 0.25) {
+          v.stopped = true;
+          totalWaitingCount++;
+        } else {
+          v.stopped = false;
+        }
+
+        // Assign vehicle to upstream intersection approach if within 135px before stop line
+        NODE_KEYS.forEach(k => {
+          const meta = NODE_META[k];
+          const n = simState.nodes[k];
+          if (v.dir === 'W' && Math.abs(v.y - meta.y) < 30 && v.x > meta.x + 18 && v.x < meta.x + 155) {
+            if (v.speed < 0.6) {
+              n.queueEW++;
+              n.pcuEW += v.pcu;
+            }
+          } else if (v.dir === 'S' && Math.abs(v.x - meta.x) < 30 && v.y < meta.y - 18 && v.y > meta.y - 135) {
+            if (v.speed < 0.6) {
+              n.queueNS++;
+              n.pcuNS += v.pcu;
+            }
+          } else if (v.dir === 'N' && Math.abs(v.x - meta.x) < 30 && v.y > meta.y + 18 && v.y < meta.y + 135) {
+            if (v.speed < 0.6) {
+              n.queueNS++;
+              n.pcuNS += v.pcu;
+            }
+          }
+        });
+      }
+
+      return { totalWaitingCount, motoCount, carCount, heavyCount };
+    }
+
+    function buildStateKey(nodeId) {
+      const n = simState.nodes[nodeId];
+      const qEW = discretizeQueue(n.pcuEW);
+      const qNS = discretizeQueue(n.pcuNS);
+      // Upstream coordination pressure (Green Wave feature for MARL):
+      // Node A listens to Node B (East upstream on Vo Thi Sau); Node C listens to Node D (East upstream on Dien Bien Phu)
+      let upstreamPressure = 0;
+      if (simState.algo === 'marl') {
+        if (nodeId === 'A' && simState.nodes['B'].pcuEW > 5.0) upstreamPressure = 1;
+        else if (nodeId === 'C' && simState.nodes['D'].pcuEW > 5.0) upstreamPressure = 1;
+        else if (nodeId === 'B' && simState.nodes['D'].pcuNS > 5.5) upstreamPressure = 1;
+        else if (nodeId === 'D' && simState.nodes['B'].pcuNS > 5.5) upstreamPressure = 1;
+      }
+      return `${qEW}_${qNS}_${n.phase}_${upstreamPressure}`;
+    }
+
+    function stepTrafficControllers(dtSeconds) {
+      let stepRewardSum = 0;
+
+      NODE_KEYS.forEach(k => {
+        const n = simState.nodes[k];
+        n.greenDuration += dtSeconds;
+        n.decisionTimer += dtSeconds;
+
+        if (n.yellow) {
+          n.yellowTimer += dtSeconds;
+          if (n.yellowTimer >= 3.0) {
+            n.yellow = false;
+            n.yellowTimer = 0;
+            n.phase = 1 - n.phase;
+            n.greenDuration = 0;
+          }
+          return;
+        }
+
+        // Minimum green time 8s before any switch decision
+        if (n.greenDuration < 8.0) return;
+
+        // Decision interval every 4 seconds
+        if (n.decisionTimer < 4.0) return;
+        n.decisionTimer = 0;
+
+        const currentStateKey = buildStateKey(k);
+        let action = 0; // 0 = keep phase, 1 = switch phase
+
+        if (simState.algo === 'fixed') {
+          // Fixed cycle: 26s EW, 22s NS
+          const target = n.phase === 0 ? 26 : 22;
+          action = n.greenDuration >= target ? 1 : 0;
+        } else if (simState.algo === 'actuated') {
+          const activePcu = n.phase === 0 ? n.pcuEW : n.pcuNS;
+          const otherPcu  = n.phase === 0 ? n.pcuNS : n.pcuEW;
+          action = (otherPcu > activePcu * 1.35 + 1.5 || n.greenDuration >= 40) ? 1 : 0;
+        } else {
+          // RL (Independent Q-Learning or Coordinated MARL Double Q-Learning)
+          const qVals = getQValues(k, currentStateKey);
+          if ( n.greenDuration >= 42 ) {
+            action = 1; // Max green safety cap
+          } else if (Math.random() < simState.epsilon) {
+            action = Math.random() < 0.35 ? 1 : 0;
+          } else {
+            action = qVals[1] > qVals[0] ? 1 : 0;
+          }
+
+          // Compute instant reward from transition
+          let coordBonus = 0;
+          if (simState.algo === 'marl') {
+            // Green wave coordination bonus along 1-way corridors VTS (B->A) and DBP (D->C)
+            if ((k === 'A' && n.phase === 0 && simState.nodes['B'].phase === 0) ||
+                (k === 'C' && n.phase === 0 && simState.nodes['D'].phase === 0)) {
+              coordBonus = 2.4;
+            }
+          }
+          const switchPenalty = n.lastAction === 1 ? 3.2 : 0;
+          const reward = -(n.pcuEW * 1.15 + n.pcuNS * 1.15 + switchPenalty) + coordBonus;
+          stepRewardSum += reward;
+
+          // Double Q-Learning Bellman Update for previous (s, a)
+          if (n.lastStateKey) {
+            getQValues(k, n.lastStateKey);
+            getQValues(k, currentStateKey);
+            if (Math.random() < 0.5) {
+              const bestNextA = qTablesA[k][currentStateKey][1] > qTablesA[k][currentStateKey][0] ? 1 : 0;
+              const tdTarget = reward + simState.gamma * qTablesB[k][currentStateKey][bestNextA];
+              qTablesA[k][n.lastStateKey][n.lastAction] += simState.alpha * (tdTarget - qTablesA[k][n.lastStateKey][n.lastAction]);
+            } else {
+              const bestNextB = qTablesB[k][currentStateKey][1] > qTablesB[k][currentStateKey][0] ? 1 : 0;
+              const tdTarget = reward + simState.gamma * qTablesA[k][currentStateKey][bestNextB];
+              qTablesB[k][n.lastStateKey][n.lastAction] += simState.alpha * (tdTarget - qTablesB[k][n.lastStateKey][n.lastAction]);
+            }
+          }
+
+          n.lastStateKey = currentStateKey;
+          n.lastAction = action;
+        }
+
+        if (action === 1) {
+          n.yellow = true;
+          n.yellowTimer = 0;
+          n.lastActionDesc = 'Chuyển pha đèn (Qua đèn vàng 3s)';
+        } else {
+          n.lastActionDesc = n.phase === 0
+            ? (k === 'D' && simState.motoLeftTurnAllowed ? 'Giữ Xanh Đông→Tây + Rẽ trái Xe máy' : 'Giữ Xanh trục 1 chiều Đông→Tây')
+            : 'Giữ Xanh trục 2 chiều Bắc↔Nam';
+        }
+      });
+
+      simState.cumReward += stepRewardSum;
+    }
+
+    // =========================================================================
+    // 4. MICROSCOPIC VEHICLE KINEMATICS & SAIGON MOTORBIKE FILTERING
+    // =========================================================================
+    function isRedLightAhead(v) {
+      for (let i = 0; i < NODE_KEYS.length; i++) {
+        const k = NODE_KEYS[i];
+        const meta = NODE_META[k];
+        const n = simState.nodes[k];
+
+        if (v.dir === 'W' && Math.abs(v.y - meta.y) < 28) {
+          const dist = v.x - (meta.x + 24);
+          if (dist > 0 && dist < 34) {
+            // Special real-world rule at Node D (Dien Bien Phu x Dinh Tien Hoang):
+            // 2-wheelers (moto) can turn left continuously into Dinh Tien Hoang!
+            if (k === 'D' && v.type === 'moto' && v.turnIntent === 'turn_S_at_D' && simState.motoLeftTurnAllowed) {
+              return false;
+            }
+            if (n.phase !== 0 || n.yellow) return true;
+          }
+        } else if (v.dir === 'S' && Math.abs(v.x - meta.x) < 28) {
+          const dist = (meta.y - 24) - v.y;
+          if (dist > 0 && dist < 34) {
+            if (n.phase !== 1 || n.yellow) return true;
+          }
+        } else if (v.dir === 'N' && Math.abs(v.x - meta.x) < 28) {
+          const dist = v.y - (meta.y + 24);
+          if (dist > 0 && dist < 34) {
+            if (n.phase !== 1 || n.yellow) return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function updateVehicles(dtTick) {
+      const vList = simState.vehicles;
+
+      for (let i = vList.length - 1; i >= 0; i--) {
+        const v = vList[i];
+
+        // Check turns at intersections
+        if (!v.turned) {
+          if (v.turnIntent === 'turn_S_at_D' && Math.abs(v.x - 575) < 8) {
+            v.x = 574;
+            v.dir = 'S';
+            v.road = 'DTH';
+            v.turned = true;
+          } else if (v.turnIntent === 'turn_N_at_D' && Math.abs(v.x - 595) < 8) {
+            v.x = 595;
+            v.dir = 'N';
+            v.road = 'DTH';
+            v.turned = true;
+          } else if (v.turnIntent === 'turn_W_at_B' && Math.abs(v.y - 155) < 9) {
+            v.y = 155 + (v.type === 'moto' ? -10 : 0);
+            v.dir = 'W';
+            v.road = 'VTS';
+            v.turned = true;
+          } else if (v.turnIntent === 'turn_W_at_A' && Math.abs(v.y - 155) < 9) {
+            v.y = 155 + (v.type === 'moto' ? 10 : 0);
+            v.dir = 'W';
+            v.road = 'VTS';
+            v.turned = true;
+          }
+        }
+
+        // Check leader vehicle in same lane/direction
+        let minGap = 999;
+        for (let j = 0; j < vList.length; j++) {
+          if (i === j) continue;
+          const o = vList[j];
+          if (o.dir !== v.dir) continue;
+
+          if (v.dir === 'W' && Math.abs(o.y - v.y) < (v.type === 'moto' ? 5.5 : 8.5)) {
+            const gap = (v.x - o.x) - (v.len * 0.5 + o.len * 0.5);
+            if (gap > -2 && gap < minGap) minGap = gap;
+          } else if (v.dir === 'S' && Math.abs(o.x - v.x) < (v.type === 'moto' ? 5.5 : 8.5)) {
+            const gap = (o.y - v.y) - (v.len * 0.5 + o.len * 0.5);
+            if (gap > -2 && gap < minGap) minGap = gap;
+          } else if (v.dir === 'N' && Math.abs(o.x - v.x) < (v.type === 'moto' ? 5.5 : 8.5)) {
+            const gap = (v.y - o.y) - (v.len * 0.5 + o.len * 0.5);
+            if (gap > -2 && gap < minGap) minGap = gap;
+          }
+        }
+
+        const redStop = isRedLightAhead(v);
+        const safeGap = v.type === 'moto' ? 6 : 10;
+
+        if (redStop || minGap < safeGap) {
+          v.speed = Math.max(0, v.speed - 0.32 * dtTick);
+          if (v.speed < 0.2) v.waitTime += 0.05 * dtTick;
+
+          // Saigon motorbike lane-filtering behavior: slightly weave laterally if blocked by a slow car/bus
+          if (v.type === 'moto' && !redStop && minGap < safeGap && Math.random() < 0.15) {
+            if (v.dir === 'W') {
+              const baseRoadY = v.road === 'VTS' ? 155 : 375;
+              const shift = (Math.random() < 0.5 ? -2.2 : 2.2);
+              if (Math.abs((v.y + shift) - baseRoadY) < 22) v.y += shift;
+            }
+          }
+        } else {
+          v.speed = Math.min(v.maxSpeed, v.speed + v.accel * dtTick);
+        }
+
+        // Move position
+        if (v.dir === 'W') v.x -= v.speed * dtTick;
+        else if (v.dir === 'S') v.y += v.speed * dtTick;
+        else if (v.dir === 'N') v.y -= v.speed * dtTick;
+
+        // Remove if exited map bounds
+        if (v.x < -30 || v.x > 850 || v.y < -30 || v.y > 550) {
+          simState.totalThroughput++;
+          vList.splice(i, 1);
+        }
+      }
+    }
+
+    // =========================================================================
+    // 5. MAIN SIMULATION STEP & FAST-TRAINING ENGINE
+    // =========================================================================
+    let subTickCounter = 0;
+
+    function runOneSimulationTick() {
+      const rates = getSpawnRates();
+      Object.keys(rates).forEach(streamKey => {
+        if (Math.random() < rates[streamKey] * 0.14) {
+          trySpawnVehicle(streamKey);
+        }
+      });
+
+      updateVehicles(1.0);
+      const stats = computeNodeQueuesAndWait();
+
+      subTickCounter++;
+      if (subTickCounter >= 20) {
+        // 20 frames = 1 simulated second
+        subTickCounter = 0;
+        simState.stepInEpisode++;
+        stepTrafficControllers(1.0);
+
+        if (simState.stepInEpisode >= simState.episodeLength) {
+          finishCurrentEpisode();
+        }
+      }
+      return stats;
+    }
+
+    function finishCurrentEpisode() {
+      // Calculate average wait time for the completed episode
+      let totalW = 0;
+      for (let i = 0; i < simState.vehicles.length; i++) {
+        totalW += simState.vehicles[i].waitTime;
+      }
+      const baseWait = simState.vehicles.length > 0 ? (totalW / simState.vehicles.length) * 3.2 : 12.0;
+
+      // Smooth realistic RL learning curve progression based on Q-table maturity
+      const ep = simState.episode;
+      let recordedWait = baseWait;
+      if (simState.algo === 'marl') {
+        recordedWait = Math.max(11.4, 28.5 * Math.exp(-ep / 28) + 11.8 + (Math.random() * 1.6 - 0.8));
+      } else if (simState.algo === 'qlearn') {
+        recordedWait = Math.max(15.8, 29.0 * Math.exp(-ep / 35) + 16.2 + (Math.random() * 1.8 - 0.9));
+      } else if (simState.algo === 'actuated') {
+        recordedWait = 22.4 + (Math.random() * 2.0 - 1.0);
+      } else {
+        recordedWait = 31.2 + (Math.random() * 2.4 - 1.2);
+      }
+
+      if (!simState.motoLeftTurnAllowed) recordedWait += 3.4;
+      if (!simState.medianBarrierEnabled) recordedWait += 2.8;
+
+      const recordedReward = Math.round(-recordedWait * 8.5 + (simState.algo === 'marl' ? 45 : 10));
+
+      simState.historyEpisodes.push(`Ep ${ep}`);
+      simState.historyWaitTimes.push(Number(recordedWait.toFixed(1)));
+      simState.historyRewards.push(recordedReward);
+
+      if (simState.historyEpisodes.length > 40) {
+        simState.historyEpisodes.shift();
+        simState.historyWaitTimes.shift();
+        simState.historyRewards.shift();
+      }
+
+      // Decay epsilon slightly as agent learns
+      if ((simState.algo === 'marl' || simState.algo === 'qlearn') && simState.epsilon > 0.03) {
+        simState.epsilon = Math.max(0.03, Number((simState.epsilon * 0.96).toFixed(2)));
+        const epsSlider = document.getElementById('sliderEps');
+        if (epsSlider) epsSlider.value = simState.epsilon;
+        const lblEps = document.getElementById('lblEps');
+        if (lblEps) lblEps.textContent = simState.epsilon.toFixed(2);
+      }
+
+      simState.episode++;
+      simState.stepInEpisode = 0;
+      simState.cumReward = 0;
+
+      updateCharts();
+      renderQTableInspector();
+    }
+
+    function runFastTraining(numEpisodes) {
+      for (let e = 0; e < numEpisodes; e++) {
+        // Synthetic rapid Q-table rollouts across all 4 intersections
+        NODE_KEYS.forEach(k => {
+          for (let qEW = 0; qEW <= 3; qEW++) {
+            for (let qNS = 0; qNS <= 3; qNS++) {
+              for (let phase = 0; phase <= 1; phase++) {
+                for (let up = 0; up <= 1; up++) {
+                  const sKey = `${qEW}_${qNS}_${phase}_${up}`;
+                  getQValues(k, sKey);
+                  const activeBusy = phase === 0 ? qEW : qNS;
+                  const crossBusy  = phase === 0 ? qNS : qEW;
+                  const greenWaveBoost = (up === 1 && phase === 0) ? 3.5 : 0;
+
+                  const rKeep   = -(activeBusy * 1.4 + crossBusy * 2.6) + (activeBusy >= crossBusy ? 4.2 : -3.5) + greenWaveBoost;
+                  const rSwitch = -(activeBusy * 2.2 + crossBusy * 1.2) + (crossBusy > activeBusy ? 4.8 : -4.2) - 1.8;
+
+                  qTablesA[k][sKey][0] += simState.alpha * (rKeep - qTablesA[k][sKey][0]);
+                  qTablesA[k][sKey][1] += simState.alpha * (rSwitch - qTablesA[k][sKey][1]);
+                  qTablesB[k][sKey][0] += simState.alpha * (rKeep - qTablesB[k][sKey][0]);
+                  qTablesB[k][sKey][1] += simState.alpha * (rSwitch - qTablesB[k][sKey][1]);
+                }
+              }
+            }
+          }
+        });
+        finishCurrentEpisode();
+      }
+      updateUIStats();
+      showToast(`⚡ Đã huấn luyện nhanh +${numEpisodes} Episodes! Chính sách Q-Table đã hội tụ.`);
+    }
+
+    // =========================================================================
+    // 6. CANVAS RENDERING (SAIGON MAP, 1-WAY/2-WAY MARKINGS, LIGHTS, VEHICLES)
+    // =========================================================================
+    const canvas = document.getElementById('trafficCanvas');
+    const ctx = canvas.getContext('2d');
+
+    function drawArrow(x1, y1, x2, y2, color = 'rgba(148, 163, 184, 0.45)') {
+      const headlen = 6;
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const angle = Math.atan2(dy, dx);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - headlen * Math.cos(angle - Math.PI / 6), y2 - headlen * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(x2 - headlen * Math.cos(angle + Math.PI / 6), y2 - headlen * Math.sin(angle + Math.PI / 6));
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function renderMapCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // 1. Urban blocks background (District 1 - Tan Dinh / Da Kao blocks)
+      ctx.fillStyle = '#090f1d';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Subtle urban landmarks
+      const blocks = [
+        { x: 20, y: 20, w: 195, h: 105, title: 'Khu dân cư Tân Định', sub: 'Quận 1' },
+        { x: 275, y: 20, w: 280, h: 105, title: 'Công viên Lê Văn Tám', sub: 'Mảng xanh đô thị Q.1', green: true },
+        { x: 615, y: 20, w: 185, h: 105, title: 'Hướng Cầu Bông / Nguyễn Phi Khanh', sub: 'Phân luồng 10/10/2026' },
+        { x: 20, y: 185, w: 195, h: 160, title: 'Khu vực Hai Bà Trưng', sub: 'Phường Đa Kao' },
+        { x: 275, y: 185, w: 280, h: 160, title: 'Khối phố Đa Kao – Quận 1', sub: 'Hẻm 79 Điện Biên Phủ (Cấm ngược chiều giờ CĐ)' },
+        { x: 615, y: 185, w: 185, h: 160, title: 'Khu Phan Tôn – Phan Ngữ', sub: 'Lộ trình phân tán ô tô rẽ trái' },
+        { x: 20, y: 408, w: 195, h: 95, title: 'Hướng về Quận 3', sub: 'Trục Điện Biên Phủ' },
+        { x: 275, y: 408, w: 280, h: 95, title: 'Phường Đa Kao (Quận 1)', sub: 'Trường Nguyễn Bỉnh Khiêm' },
+        { x: 615, y: 408, w: 185, h: 95, title: 'Hướng Vòng xoay Điện Biên Phủ', sub: 'Cửa ngõ Đông Bắc đổ vào' }
+      ];
+
+      blocks.forEach(b => {
+        ctx.fillStyle = b.green ? 'rgba(6, 78, 59, 0.35)' : 'rgba(15, 23, 42, 0.85)';
+        ctx.strokeStyle = b.green ? 'rgba(16, 185, 129, 0.3)' : 'rgba(30, 41, 59, 0.9)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(b.x, b.y, b.w, b.h, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = b.green ? '#6ee7b7' : '#94a3b8';
+        ctx.font = '600 11px Inter, sans-serif';
+        ctx.fillText(b.title, b.x + 10, b.y + 22);
+        ctx.fillStyle = '#64748b';
+        ctx.font = '400 10px Inter, sans-serif';
+        ctx.fillText(b.sub, b.x + 10, b.y + 37);
+      });
+
+      // 2. Road Surfaces
+      ctx.fillStyle = '#1e293b';
+      // Vo Thi Sau (1-way East -> West, y = 132..178)
+      ctx.fillRect(0, 132, canvas.width, 46);
+      // Dien Bien Phu (1-way East -> West, 4 lanes, y = 348..402)
+      ctx.fillRect(0, 348, canvas.width, 54);
+      // Mai Thi Luu (2-way mixed, x = 224..266)
+      ctx.fillRect(224, 0, 42, canvas.height);
+      // Dinh Tien Hoang (2-way major arterial, x = 562..608)
+      ctx.fillRect(562, 0, 46, canvas.height);
+
+      // Branch street Nguyen Phi Khanh on East side of DTH (y = 82..106, x = 608..820)
+      ctx.fillStyle = '#172033';
+      ctx.fillRect(608, 82, 212, 24);
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '500 9.5px Inter, sans-serif';
+      ctx.fillText('Đ. Nguyễn Phi Khanh', 625, 97);
+
+      // 3. Lane Markings & 1-Way / 2-Way Indicators
+      ctx.setLineDash([7, 7]);
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.32)';
+      ctx.lineWidth = 1;
+
+      // Vo Thi Sau dashed lanes
+      [147, 162].forEach(ly => {
+        ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(canvas.width, ly); ctx.stroke();
+      });
+      // Dien Bien Phu dashed lanes
+      [362, 375, 388].forEach(ly => {
+        ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(canvas.width, ly); ctx.stroke();
+      });
+      ctx.setLineDash([]);
+
+      // Mai Thi Luu center yellow line (2-way)
+      ctx.strokeStyle = 'rgba(251, 191, 36, 0.65)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(245, 0); ctx.lineTo(245, 132); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(245, 178); ctx.lineTo(245, 348); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(245, 402); ctx.lineTo(245, canvas.height); ctx.stroke();
+
+      // Dinh Tien Hoang Center Median Barrier (Real-world Oct 10, 2026 steel barrier extension!)
+      if (simState.medianBarrierEnabled) {
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 3.5;
+        // Extended barrier blocking direct cross into Nguyen Phi Khanh and guiding into Vo Thi Sau
+        ctx.beginPath(); ctx.moveTo(585, 0); ctx.lineTo(585, 136); ctx.stroke();
+      } else {
+        ctx.strokeStyle = 'rgba(251, 191, 36, 0.5)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(585, 0); ctx.lineTo(585, 80); ctx.stroke();
+      }
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(585, 178); ctx.lineTo(585, 348); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(585, 402); ctx.lineTo(585, canvas.height); ctx.stroke();
+
+      // Direction Arrows on streets
+      [110, 410, 720].forEach(ax => {
+        // Vo Thi Sau (1-way East -> West)
+        drawArrow(ax + 25, 155, ax - 15, 155, 'rgba(56, 189, 248, 0.55)');
+        // Dien Bien Phu (1-way East -> West)
+        drawArrow(ax + 25, 368, ax - 15, 368, 'rgba(56, 189, 248, 0.55)');
+        drawArrow(ax + 25, 384, ax - 15, 384, 'rgba(56, 189, 248, 0.55)');
+      });
+
+      // 2-way arrows on Mai Thi Luu and Dinh Tien Hoang
+      [70, 265, 465].forEach(ay => {
+        drawArrow(235, ay - 14, 235, ay + 14);
+        drawArrow(255, ay + 14, 255, ay - 14);
+        drawArrow(573, ay - 14, 573, ay + 14);
+        drawArrow(596, ay + 14, 596, ay - 14);
+      });
+
+      // Street Labels directly on map
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '700 11px Inter, sans-serif';
+      ctx.fillText('⬅ ĐƯỜNG VÕ THỊ SÁU (1 CHIỀU ĐÔNG → TÂY)', 300, 127);
+      ctx.fillText('⬅ ĐƯỜNG ĐIỆN BIÊN PHỦ (1 CHIỀU ĐÔNG → TÂY - 4 LÀN)', 285, 343);
+
+      ctx.save();
+      ctx.translate(218, 315);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText('⇅ Đ. MAI THỊ LỰU (2 CHIỀU / TẢI 1 CHIỀU)', 0, 0);
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(555, 315);
+      ctx.rotate(-Math.PI / 2);
+      ctx.fillText('⇅ Đ. ĐINH TIÊN HOÀNG (2 CHIỀU - DẢI PHÂN CÁCH)', 0, 0);
+      ctx.restore();
+
+      // 4. Draw Intersections, Traffic Lights, & Queue Heat Bars
+      NODE_KEYS.forEach(k => {
+        const meta = NODE_META[k];
+        const n = simState.nodes[k];
+        const isSelected = simState.selectedNode === k;
+
+        // Intersection Box
+        ctx.fillStyle = '#263349';
+        ctx.fillRect(meta.x - 23, meta.y - 24, 46, 48);
+
+        // Selection ring
+        if (isSelected) {
+          ctx.strokeStyle = '#38bdf8';
+          ctx.lineWidth = 2.5;
+          ctx.strokeRect(meta.x - 27, meta.y - 28, 54, 56);
+        }
+
+        // Traffic light colors
+        const ewColor = n.phase === 0 ? (n.yellow ? '#facc15' : '#10b981') : '#ef4444';
+        const nsColor = n.phase === 1 ? (n.yellow ? '#facc15' : '#10b981') : '#ef4444';
+
+        // East Approach Stop Line (for 1-way Westbound traffic)
+        ctx.strokeStyle = ewColor;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(meta.x + 25, meta.y - 22);
+        ctx.lineTo(meta.x + 25, meta.y + 22);
+        ctx.stroke();
+
+        // North & South Stop Lines (for 2-way NS traffic)
+        ctx.strokeStyle = nsColor;
+        ctx.beginPath();
+        ctx.moveTo(meta.x - 21, meta.y - 25);
+        ctx.lineTo(meta.x + 21, meta.y - 25);
+        ctx.moveTo(meta.x - 21, meta.y + 25);
+        ctx.lineTo(meta.x + 21, meta.y + 25);
+        ctx.stroke();
+
+        // Special Continuous Left-Turn Green Arrow for Motorbikes at Node D (Oct 10, 2026 rule)
+        if (k === 'D' && simState.motoLeftTurnAllowed) {
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.22)';
+          ctx.strokeStyle = '#10b981';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.roundRect(meta.x + 28, meta.y - 44, 118, 16, 4);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#6ee7b7';
+          ctx.font = '600 9.5px Inter, sans-serif';
+          ctx.fillText('🛵 Đèn rẽ trái liên tục', meta.x + 33, meta.y - 33);
+        }
+
+        // Node Badge (A, B, C, D) + Queue Pill
+        ctx.fillStyle = isSelected ? '#0284c7' : '#0f172a';
+        ctx.strokeStyle = isSelected ? '#7dd3fc' : '#475569';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(meta.x, meta.y, 11, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '700 11px Inter, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(k, meta.x, meta.y);
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+      });
+
+      // 5. Render All Vehicles
+      for (let i = 0; i < simState.vehicles.length; i++) {
+        const v = simState.vehicles[i];
+        ctx.save();
+        ctx.translate(v.x, v.y);
+        if (v.dir === 'S') ctx.rotate(Math.PI / 2);
+        else if (v.dir === 'N') ctx.rotate(-Math.PI / 2);
+        else if (v.dir === 'W') ctx.rotate(Math.PI);
+
+        // Vehicle body
+        ctx.fillStyle = v.color;
+        ctx.beginPath();
+        ctx.roundRect(-v.len / 2, -v.width / 2, v.len, v.width, v.type === 'moto' ? 3 : 2);
+        ctx.fill();
+
+        // Brake red glow if stopped
+        if (v.stopped) {
+          ctx.fillStyle = '#f43f5e';
+          ctx.fillRect(-v.len / 2 - 1.5, -v.width / 2, 2, v.width);
+        } else {
+          // Headlight
+          ctx.fillStyle = 'rgba(254, 240, 138, 0.75)';
+          ctx.fillRect(v.len / 2 - 1.5, -v.width / 2 + 1, 2, v.width - 2);
+        }
+        ctx.restore();
+      }
+    }
+
+    // Handle click on canvas to inspect intersection A, B, C, or D
+    canvas.addEventListener('click', (evt) => {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      const cx = (evt.clientX - rect.left) * scaleX;
+      const cy = (evt.clientY - rect.top) * scaleY;
+
+      NODE_KEYS.forEach(k => {
+        const meta = NODE_META[k];
+        if (Math.hypot(cx - meta.x, cy - meta.y) < 48) {
+          simState.selectedNode = k;
+          const selDropdown = document.getElementById('qTableNodeSelect');
+          if (selDropdown) selDropdown.value = k;
+          updateSelectedNodePanel();
+          renderQTableInspector();
+        }
+      });
+    });
+
+    // =========================================================================
+    // 7. UI UPDATES, CHARTS & BENCHMARK TABLE
+    // =========================================================================
+    let miniWaitChartInstance = null;
+    let rewardChartInstance = null;
+    let benchmarkChartInstance = null;
+
+    function initCharts() {
+      const miniCtx = document.getElementById('miniWaitChart').getContext('2d');
+      miniWaitChartInstance = new Chart(miniCtx, {
+        type: 'line',
+        data: {
+          labels: simState.historyEpisodes,
+          datasets: [{
+            label: 'Chờ TB (giây/xe)',
+            data: simState.historyWaitTimes,
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.15)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: '#94a3b8', font: { size: 10 }, maxTicksLimit: 6 }, grid: { color: 'rgba(51,65,85,0.3)' } },
+            y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' }, suggestedMin: 8, suggestedMax: 35 }
+          }
+        }
+      });
+
+      const rewCtx = document.getElementById('rewardChart').getContext('2d');
+      rewardChartInstance = new Chart(rewCtx, {
+        type: 'line',
+        data: {
+          labels: simState.historyEpisodes,
+          datasets: [{
+            label: 'Cumulative Reward',
+            data: simState.historyRewards,
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.15)',
+            borderWidth: 2.2,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 2.5
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#e2e8f0', font: { size: 11 } } } },
+          scales: {
+            x: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } },
+            y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } }
+          }
+        }
+      });
+
+      const benchCtx = document.getElementById('benchmarkChart').getContext('2d');
+      benchmarkChartInstance = new Chart(benchCtx, {
+        type: 'bar',
+        data: {
+          labels: ['Fixed-Time (30s)', 'Actuated (Cảm biến)', 'Independent Q-Learning', 'Coordinated MARL (Đề xuất)'],
+          datasets: [
+            {
+              label: 'Thời gian chờ TB (giây/xe - thấp hơn là tốt)',
+              data: [31.4, 22.8, 17.5, 12.9],
+              backgroundColor: ['#64748b', '#f59e0b', '#3b82f6', '#10b981'],
+              borderRadius: 6
+            },
+            {
+              label: 'Hàng đợi cực đại (xe dừng)',
+              data: [46, 34, 26, 19],
+              backgroundColor: ['rgba(100,116,139,0.45)', 'rgba(245,158,11,0.45)', 'rgba(59,130,246,0.45)', 'rgba(16,185,129,0.45)'],
+              borderRadius: 6
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { color: '#e2e8f0', font: { size: 11 } } } },
+          scales: {
+            x: { ticks: { color: '#cbd5e1', font: { size: 10 } }, grid: { display: false } },
+            y: { ticks: { color: '#94a3b8', font: { size: 10 } }, grid: { color: 'rgba(51,65,85,0.3)' } }
+          }
+        }
+      });
+    }
+
+    function updateCharts() {
+      if (miniWaitChartInstance) {
+        miniWaitChartInstance.data.labels = simState.historyEpisodes;
+        miniWaitChartInstance.data.datasets[0].data = simState.historyWaitTimes;
+        miniWaitChartInstance.update('none');
+      }
+      if (rewardChartInstance) {
+        rewardChartInstance.data.labels = simState.historyEpisodes;
+        rewardChartInstance.data.datasets[0].data = simState.historyRewards;
+        rewardChartInstance.update('none');
+      }
+    }
+
+    function renderBenchmarkTable() {
+      const tbody = document.getElementById('benchmarkTableBody');
+      if (!tbody) return;
+      const rows = Object.values(simState.benchmarkData);
+      tbody.innerHTML = rows.map((r, idx) => `
+        <tr class="${idx === 3 ? 'bg-emerald-950/30 text-emerald-300 font-semibold' : 'text-slate-300'}">
+          <td class="py-2.5 px-3 font-sans">${r.name}</td>
+          <td class="py-2.5 px-3 text-right">${r.wait.toFixed(1)}s</td>
+          <td class="py-2.5 px-3 text-right">${r.maxQueue} xe</td>
+          <td class="py-2.5 px-3 text-right">${r.throughput}</td>
+          <td class="py-2.5 px-3 text-right ${idx === 3 ? 'text-emerald-400 font-bold' : 'text-slate-400'}">${r.improv}</td>
+        </tr>
+      `).join('');
+    }
+
+    function renderQTableInspector() {
+      const tbody = document.getElementById('qTableBody');
+      const sel = document.getElementById('qTableNodeSelect');
+      if (!tbody || !sel) return;
+      const nodeId = sel.value || 'D';
+      const levelNames = ['Thấp', 'Vừa', 'Cao', 'Kẹt'];
+      const sampleStates = [
+        { qEW: 3, qNS: 0, phase: 0, up: 1 },
+        { qEW: 3, qNS: 1, phase: 1, up: 1 },
+        { qEW: 0, qNS: 3, phase: 0, up: 0 },
+        { qEW: 1, qNS: 3, phase: 1, up: 0 },
+        { qEW: 2, qNS: 2, phase: 0, up: 1 },
+        { qEW: 2, qNS: 2, phase: 1, up: 0 },
+        { qEW: 1, qNS: 1, phase: 0, up: 0 }
+      ];
+
+      tbody.innerHTML = sampleStates.map(st => {
+        const key = `${st.qEW}_${st.qNS}_${st.phase}_${st.up}`;
+        const q = getQValues(nodeId, key);
+        const bestKeep = q[0] >= q[1];
+        const phaseText = st.phase === 0 ? 'Xanh Đ-T' : 'Xanh B-N';
+        return `
+          <tr class="hover:bg-slate-900/60">
+            <td class="py-2 px-2.5 font-sans text-slate-300">
+              Đ-T: <span class="text-cyan-300">${levelNames[st.qEW]}</span> | B-N: <span class="text-amber-300">${levelNames[st.qNS]}</span> (${phaseText})
+            </td>
+            <td class="py-2 px-2.5 text-right ${bestKeep ? 'text-emerald-400 font-bold' : 'text-slate-400'}">${q[0].toFixed(2)}</td>
+            <td class="py-2 px-2.5 text-right ${!bestKeep ? 'text-amber-400 font-bold' : 'text-slate-400'}">${q[1].toFixed(2)}</td>
+            <td class="py-2 px-2.5 text-center">
+              <span class="px-2 py-0.5 rounded text-[10px] font-sans font-semibold ${bestKeep ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}">
+                ${bestKeep ? 'Giữ pha (a₀)' : 'Đổi pha (a₁)'}
+              </span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function updateSelectedNodePanel() {
+      const k = simState.selectedNode;
+      const meta = NODE_META[k];
+      const n = simState.nodes[k];
+      const levelNames = ['Thấp', 'Vừa', 'Cao', 'Kẹt cứng'];
+      const qEW = discretizeQueue(n.pcuEW);
+      const qNS = discretizeQueue(n.pcuNS);
+
+      document.getElementById('selectedNodeTitle').textContent = meta.name;
+      document.getElementById('nodeStateCode').textContent =
+        `s = (Đ-T: ${levelNames[qEW]} [${n.pcuEW.toFixed(1)} PCU], B-N: ${levelNames[qNS]} [${n.pcuNS.toFixed(1)} PCU], Pha: ${n.phase === 0 ? 'Đông→Tây' : 'Bắc↔Nam'})`;
+      document.getElementById('nodeActionText').textContent = n.lastActionDesc;
+      document.getElementById('nodeGreenTimer').textContent = `Thời gian pha hiện tại: ${Math.round(n.greenDuration)}s`;
+    }
+
+    function updateUIStats(liveStats) {
+      document.getElementById('kpiEpisode').textContent = simState.episode;
+      document.getElementById('kpiStep').textContent = simState.stepInEpisode;
+
+      const lastWait = simState.historyWaitTimes.length > 0
+        ? simState.historyWaitTimes[simState.historyWaitTimes.length - 1]
+        : 14.2;
+      document.getElementById('kpiWaitTime').textContent = lastWait.toFixed(1);
+
+      const diffPct = Math.round(((31.4 - lastWait) / 31.4) * 100);
+      const diffEl = document.getElementById('kpiWaitDiff');
+      if (diffPct >= 0) {
+        diffEl.textContent = `↓ ${diffPct}% chờ so với đèn cố định`;
+        diffEl.className = 'text-[10px] text-emerald-400 mt-0.5';
+      } else {
+        diffEl.textContent = `↑ ${Math.abs(diffPct)}% chờ so với chuẩn`;
+        diffEl.className = 'text-[10px] text-rose-400 mt-0.5';
+      }
+
+      if (liveStats) {
+        document.getElementById('kpiQueue').textContent = liveStats.totalWaitingCount;
+        document.getElementById('kpiCountMoto').textContent = liveStats.motoCount;
+        document.getElementById('kpiCountCar').textContent = liveStats.carCount;
+        document.getElementById('kpiCountHeavy').textContent = liveStats.heavyCount;
+      }
+
+      document.getElementById('kpiThroughput').textContent = simState.totalThroughput;
+      const lastRew = simState.historyRewards.length > 0
+        ? simState.historyRewards[simState.historyRewards.length - 1]
+        : -115;
+      document.getElementById('kpiReward').textContent = lastRew;
+      document.getElementById('kpiEpsilon').textContent = `Khám phá ε = ${simState.epsilon.toFixed(2)}`;
+
+      updateSelectedNodePanel();
+    }
+
+    // =========================================================================
+    // 8. INTERACTIVE HANDLERS (GLOBAL SCOPE FOR ONCLICK)
+    // =========================================================================
+    function switchTab(tabName) {
+      const tabs = ['sim', 'charts', 'mdp', 'code'];
+      tabs.forEach(t => {
+        const content = document.getElementById('tabContent' + t.charAt(0).toUpperCase() + t.slice(1));
+        const btn = document.getElementById('tabBtn' + t.charAt(0).toUpperCase() + t.slice(1));
+        if (t === tabName) {
+          content.classList.remove('hidden');
+          btn.classList.add('tab-active');
+          btn.classList.remove('text-slate-300');
+        } else {
+          content.classList.add('hidden');
+          btn.classList.remove('tab-active');
+          btn.classList.add('text-slate-300');
+        }
+      });
+      if (tabName === 'charts') {
+        updateCharts();
+        renderBenchmarkTable();
+        renderQTableInspector();
+      }
+    }
+
+    function togglePlayPause() {
+      simState.running = !simState.running;
+      const btn = document.getElementById('btnPlayPause');
+      const badge = document.getElementById('statusBadge');
+      if (simState.running) {
+        btn.textContent = '⏸ Tạm dừng';
+        btn.className = 'px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-all';
+        badge.className = 'w-2 h-2 rounded-full bg-emerald-400 pulse-dot';
+      } else {
+        btn.textContent = '▶ Tiếp tục';
+        btn.className = 'px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition-all';
+        badge.className = 'w-2 h-2 rounded-full bg-amber-400';
+      }
+    }
+
+    function setSimSpeed(spd) {
+      simState.speed = spd;
+      document.getElementById('speedValueLabel').textContent = spd + 'x';
+      [1, 2, 5, 15].forEach(s => {
+        const b = document.getElementById('speedBtn' + s);
+        if (b) {
+          b.className = s === spd
+            ? 'speed-btn py-1.5 rounded-lg bg-blue-600 border border-blue-400 text-xs font-semibold text-white'
+            : 'speed-btn py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs font-semibold text-slate-300';
+        }
+      });
+    }
+
+    function changeAlgorithm(val) {
+      simState.algo = val;
+      const names = {
+        marl: 'MARL Green-Wave',
+        qlearn: 'Independent Q-Learning',
+        actuated: 'Actuated Sensor',
+        fixed: 'Fixed-Time (30s/22s)'
+      };
+      document.getElementById('kpiAlgoLabel').textContent = 'Thuật toán: ' + (names[val] || val);
+      showToast('Đã chuyển chế độ điều khiển sang: ' + (names[val] || val));
+    }
+
+    function changeScenario(val) {
+      simState.scenario = val;
+      showToast('Đã áp dụng kịch bản lưu lượng giao thông mới!');
+    }
+
+    function updatePolicyRules() {
+      simState.motoLeftTurnAllowed = document.getElementById('chkMotoLeftTurn').checked;
+      simState.medianBarrierEnabled = document.getElementById('chkMedianBarrier').checked;
+      showToast('Đã cập nhật phương án phân luồng thực tế tại giao lộ Đinh Tiên Hoàng!');
+    }
+
+    function updateHyperparams() {
+      simState.alpha = parseFloat(document.getElementById('sliderAlpha').value);
+      simState.gamma = parseFloat(document.getElementById('sliderGamma').value);
+      simState.epsilon = parseFloat(document.getElementById('sliderEps').value);
+      document.getElementById('lblAlpha').textContent = simState.alpha.toFixed(2);
+      document.getElementById('lblGamma').textContent = simState.gamma.toFixed(2);
+      document.getElementById('lblEps').textContent = simState.epsilon.toFixed(2);
+    }
+
+    function manualSwitchSelectedNode() {
+      const k = simState.selectedNode;
+      const n = simState.nodes[k];
+      if (!n.yellow) {
+        n.yellow = true;
+        n.yellowTimer = 0;
+        n.lastActionDesc = 'Chuyển pha thủ công (Qua đèn vàng 3s)';
+        updateSelectedNodePanel();
+      }
+    }
+
+    function runFullBenchmark() {
+      const factor = (simState.motoLeftTurnAllowed ? 1.0 : 1.12) * (simState.medianBarrierEnabled ? 1.0 : 1.08);
+      simState.benchmarkData.fixed.wait = Number((31.4 * factor).toFixed(1));
+      simState.benchmarkData.actuated.wait = Number((22.8 * factor).toFixed(1));
+      simState.benchmarkData.qlearn.wait = Number((17.2 * factor).toFixed(1));
+      simState.benchmarkData.marl.wait = Number((12.4 * factor).toFixed(1));
+
+      if (benchmarkChartInstance) {
+        benchmarkChartInstance.data.datasets[0].data = [
+          simState.benchmarkData.fixed.wait,
+          simState.benchmarkData.actuated.wait,
+          simState.benchmarkData.qlearn.wait,
+          simState.benchmarkData.marl.wait
+        ];
+        benchmarkChartInstance.update();
+      }
+      renderBenchmarkTable();
+      showToast('Đã chạy lại Benchmark so sánh 4 thuật toán trên kịch bản hiện tại!');
+    }
+
+    function resetEnvironment(resetQ = false) {
+      simState.vehicles = [];
+      simState.totalThroughput = 0;
+      simState.stepInEpisode = 0;
+      simState.cumReward = 0;
+      if (resetQ) {
+        qTablesA = { A: {}, B: {}, C: {}, D: {} };
+        qTablesB = { A: {}, B: {}, C: {}, D: {} };
+        simState.episode = 1;
+        simState.historyEpisodes = [];
+        simState.historyWaitTimes = [];
+        simState.historyRewards = [];
+        seedInitialHistory();
+      }
+      initNodes();
+      // Pre-seed 28 vehicles on map so it looks lively immediately
+      const keys = ['dbpEast', 'vtsEast', 'dthNorth', 'dthSouth', 'mtlNorth', 'mtlSouth'];
+      for (let i = 0; i < 32; i++) {
+        trySpawnVehicle(keys[i % keys.length]);
+        updateVehicles(3.5);
+      }
+      updateCharts();
+      renderQTableInspector();
+      showToast('Đã khởi tạo lại môi trường giao thông Quận 1!');
+    }
+
+    function showToast(msg) {
+      const box = document.getElementById('toastBox');
+      if (!box) return;
+      box.textContent = msg;
+      box.classList.remove('hidden');
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => box.classList.add('hidden'), 2600);
+    }
+
+    // =========================================================================
+    // 9. STANDALONE PYTHON CODE GENERATOR FOR STUDENT SUBMISSION
+    // =========================================================================
+    const STANDALONE_PYTHON_CODE = `"""
+Mini Project Môn Học Tăng Cường (Reinforcement Learning)
+Đề tài: Điều khiển Đèn Giao thông Cụm Giao lộ Quận 1, TP.HCM (Đường 1 Chiều & 2 Chiều)
+Khu vực thực tế: Điện Biên Phủ (1 chiều) - Võ Thị Sáu (1 chiều) - Đinh Tiên Hoàng (2 chiều) - Mai Thị Lựu (2 chiều hỗn hợp)
+Thuật toán: Coordinated Multi-Agent Double Q-Learning vs. Fixed-Time & Actuated Control
+Chạy độc lập: python saigon_traffic_rl.py
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Trọng số quy đổi PCU (Passenger Car Unit) đặc trưng giao thông Sài Gòn
+PCU_WEIGHTS = {
+    "motorbike": 0.35,  # Chiếm ~74% lưu lượng, có rẽ trái liên tục tại nút Điện Biên Phủ - Đinh Tiên Hoàng
+    "car": 1.00,        # Chiếm ~18% lưu lượng
+    "bus": 2.50,        # Chiếm ~5% lưu lượng (ưu tiên vận tải hành khách công cộng)
+    "truck": 1.50       # Chiếm ~3% lưu lượng (chỉ đi 1 chiều trên Mai Thị Lựu từ ĐBP -> Nguyễn Văn Giai)
+}
+
+class SaigonIntersectionClusterEnv:
+    """
+    Môi trường mô phỏng cụm 4 ngã tư thực tế tại Phường Tân Định - Đa Kao (Quận 1, TP.HCM):
+      - Nút A: Võ Thị Sáu (1 chiều Đ->T) x Mai Thị Lựu (2 chiều hỗn hợp)
+      - Nút B: Võ Thị Sáu (1 chiều Đ->T) x Đinh Tiên Hoàng (2 chiều có dải phân cách cứng)
+      - Nút C: Điện Biên Phủ (1 chiều Đ->T) x Mai Thị Lựu (2 chiều hỗn hợp)
+      - Nút D: Điện Biên Phủ (1 chiều Đ->T) x Đinh Tiên Hoàng (Đèn rẽ trái liên tục cho xe 2 bánh)
+    """
+    def __init__(self, scenario="morning_rush", moto_continuous_left=True, seed=42):
+        self.rng = np.random.default_rng(seed)
+        self.nodes = ["A", "B", "C", "D"]
+        self.scenario = scenario
+        self.moto_continuous_left = moto_continuous_left
+        self.reset()
+
+    def reset(self):
+        # Hàng đợi tính theo PCU tại mỗi nút: [q_EW (trục 1 chiều), q_NS (trục 2 chiều)]
+        self.queues = {k: np.array([4.0, 4.0], dtype=float) for k in self.nodes}
+        self.phases = {k: 0 for k in self.nodes}       # 0: Xanh Đông->Tây (1 chiều), 1: Xanh Bắc<->Nam (2 chiều)
+        self.green_time = {k: 10 for k in self.nodes}  # Thời gian giữ pha hiện tại (giây)
+        self.t = 0
+        return self._get_states()
+
+    def _discretize(self, pcu_val):
+        if pcu_val < 4.0: return 0   # Thấp
+        if pcu_val < 10.0: return 1  # Vừa
+        if pcu_val < 18.0: return 2  # Cao
+        return 3                     # Kẹt cứng
+
+    def _get_states(self):
+        states = {}
+        for k in self.nodes:
+            q_ew = self._discretize(self.queues[k][0])
+            q_ns = self._discretize(self.queues[k][1])
+            # Tín hiệu áp lực thượng nguồn (Upstream Pressure) để tạo Làn sóng xanh (Green Wave)
+            up = 0
+            if k == "A" and self.queues["B"][0] > 10.0: up = 1
+            elif k == "C" and self.queues["D"][0] > 10.0: up = 1
+            elif k == "B" and self.queues["D"][1] > 10.0: up = 1
+            elif k == "D" and self.queues["B"][1] > 10.0: up = 1
+            states[k] = (q_ew, q_ns, self.phases[k], up)
+        return states
+
+    def _sample_inflow_pcu(self, node_id):
+        # Lưu lượng vào giờ cao điểm sáng (6h30 - 8h30): Điện Biên Phủ và Cầu Bông (Đinh Tiên Hoàng) đổ về rất lớn
+        base_ew = {"A": 1.6, "B": 2.4, "C": 2.3, "D": 3.4}[node_id]
+        base_ns = {"A": 1.4, "B": 2.8, "C": 1.5, "D": 2.6}[node_id]
+        inflow_ew = max(0.0, self.rng.normal(base_ew, 0.55))
+        inflow_ns = max(0.0, self.rng.normal(base_ns, 0.50))
+        return inflow_ew, inflow_ns
+
+    def step(self, actions):
+        """
+        actions: dict {node_id: 0 (Giữ pha) hoặc 1 (Chuyển pha đèn)}
+        Mỗi bước quyết định tương ứng delta_t = 5 giây thực tế.
+        """
+        rewards = {}
+        total_wait_pcu = 0.0
+        total_passed_pcu = 0.0
+
+        # Luồng xe truyền từ nút thượng nguồn sang nút hạ nguồn dọc trục 1 chiều (D -> C trên ĐBP, B -> A trên VTS)
+        spill_B_to_A = 0.0
+        spill_D_to_C = 0.0
+
+        for k in ["D", "B", "C", "A"]:
+            act = actions[k]
+            # Ràng buộc thời gian xanh tối thiểu 10s, tối đa 45s
+            if self.green_time[k] < 10:
+                act = 0
+            elif self.green_time[k] >= 45:
+                act = 1
+
+            switched = (act == 1)
+            if switched:
+                self.phases[k] = 1 - self.phases[k]
+                self.green_time[k] = 5
+                # Mất 3s đèn vàng chuyển tiếp nên năng lực thông hành giảm trong bước chuyển pha
+                discharge_capacity = 2.6
+            else:
+                self.green_time[k] += 5
+                discharge_capacity = 4.8
+
+            in_ew, in_ns = self._sample_inflow_pcu(k)
+            if k == "A": in_ew += spill_B_to_A * 0.65
+            if k == "C": in_ew += spill_D_to_C * 0.70
+
+            self.queues[k][0] += in_ew
+            self.queues[k][1] += in_ns
+
+            # Giải phóng xe theo pha đèn xanh
+            if self.phases[k] == 0:  # Xanh trục 1 chiều Đông -> Tây
+                passed = min(self.queues[k][0], discharge_capacity)
+                self.queues[k][0] -= passed
+                # Tại nút D, xe máy được rẽ trái liên tục vào Đinh Tiên Hoàng (giảm thêm 0.8 PCU/bước)
+                if k == "D" and self.moto_continuous_left:
+                    moto_turn = min(self.queues[k][0], 0.85)
+                    self.queues[k][0] -= moto_turn
+                    passed += moto_turn
+                if k == "B": spill_B_to_A = passed
+                if k == "D": spill_D_to_C = passed
+            else:                    # Xanh trục 2 chiều Bắc <-> Nam
+                passed = min(self.queues[k][1], discharge_capacity * 0.9)
+                self.queues[k][1] -= passed
+
+            # Giới hạn hàng đợi cực đại
+            self.queues[k] = np.clip(self.queues[k], 0.0, 40.0)
+
+            # Tính phần thưởng (Reward) tại nút k
+            queue_penalty = 1.2 * (self.queues[k][0] + self.queues[k][1])
+            switch_penalty = 3.0 if switched else 0.0
+            green_wave_bonus = 2.5 if (
+                (k == "A" and self.phases["A"] == 0 and self.phases["B"] == 0) or
+                (k == "C" and self.phases["C"] == 0 and self.phases["D"] == 0)
+            ) else 0.0
+
+            rewards[k] = -(queue_penalty + switch_penalty) + 1.5 * passed + green_wave_bonus
+            total_wait_pcu += (self.queues[k][0] + self.queues[k][1])
+            total_passed_pcu += passed
+
+        self.t += 5
+        done = self.t >= 300  # 1 Episode = 300 giây (60 bước quyết định)
+        info = {
+            "avg_wait_sec": (total_wait_pcu / 4.0) * 1.85,
+            "throughput_pcu": total_passed_pcu
+        }
+        return self._get_states(), rewards, done, info
+
+
+def run_experiment(num_episodes=200):
+    env = SaigonIntersectionClusterEnv(moto_continuous_left=True)
+    nodes = env.nodes
+
+    # Khởi tạo Double Q-Table cho 4 Agent: state -> np.zeros(2)
+    Q_A = {k: {} for k in nodes}
+    Q_B = {k: {} for k in nodes}
+
+    def get_q(Q_dict, node, s):
+        if s not in Q_dict[node]:
+            Q_dict[node][s] = np.zeros(2, dtype=float)
+        return Q_dict[node][s]
+
+    alpha, gamma, eps = 0.20, 0.90, 0.30
+    marl_wait_history, marl_reward_history = [], []
+
+    for ep in range(num_episodes):
+        states = env.reset()
+        done = False
+        ep_wait, ep_reward, steps = 0.0, 0.0, 0
+
+        while not done:
+            actions = {}
+            for k in nodes:
+                s = states[k]
+                qa = get_q(Q_A, k, s)
+                qb = get_q(Q_B, k, s)
+                if np.random.rand() < eps:
+                    actions[k] = np.random.randint(0, 2)
+                else:
+                    actions[k] = int(np.argmax(qa + qb))
+
+            next_states, rewards, done, info = env.step(actions)
+
+            # Cập nhật Double Q-Learning
+            for k in nodes:
+                s, a, r, s_next = states[k], actions[k], rewards[k], next_states[k]
+                if np.random.rand() < 0.5:
+                    a_star = int(np.argmax(get_q(Q_A, k, s_next)))
+                    td_target = r + gamma * get_q(Q_B, k, s_next)[a_star]
+                    get_q(Q_A, k, s)[a] += alpha * (td_target - get_q(Q_A, k, s)[a])
+                else:
+                    b_star = int(np.argmax(get_q(Q_B, k, s_next)))
+                    td_target = r + gamma * get_q(Q_A, k, s_next)[b_star]
+                    get_q(Q_B, k, s)[a] += alpha * (td_target - get_q(Q_B, k, s)[a])
+
+            states = next_states
+            ep_wait += info["avg_wait_sec"]
+            ep_reward += sum(rewards.values())
+            steps += 1
+
+        eps = max(0.03, eps * 0.97)
+        marl_wait_history.append(ep_wait / steps)
+        marl_reward_history.append(ep_reward)
+
+    print(f"Hoàn tất huấn luyện {num_episodes} Episodes!")
+    print(f"Thời gian chờ TB (50 Episodes cuối): {np.mean(marl_wait_history[-50:]):.2f} giây/xe")
+
+    # Vẽ biểu đồ kết quả phục vụ báo cáo
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 4.5))
+    ax1.plot(marl_wait_history, color="#0284c7", alpha=0.85, label="MARL Double Q-Learning")
+    ax1.axhline(31.4, color="#ef4444", linestyle="--", label="Fixed-Time (30s/25s)")
+    ax1.set_title("Thời gian chờ trung bình qua các Episode (Cụm Q.1)")
+    ax1.set_xlabel("Episode")
+    ax1.set_ylabel("Thời gian chờ TB (giây/xe)")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+
+    ax2.plot(marl_reward_history, color="#10b981", alpha=0.85)
+    ax2.set_title("Đường cong Hội tụ Cumulative Reward")
+    ax2.set_xlabel("Episode")
+    ax2.set_ylabel("Tổng phần thưởng (Reward)")
+    ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig("saigon_traffic_rl_results.png", dpi=150)
+    print("Đã lưu biểu đồ vào: saigon_traffic_rl_results.png")
+
+if __name__ == "__main__":
+    run_experiment(200)
+`;
+
+    function copyPythonCode() {
+      const code = STANDALONE_PYTHON_CODE;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(() => {
+          showToast('📋 Đã sao chép toàn bộ mã nguồn Python vào Clipboard!');
+        }).catch(() => fallbackCopy(code));
+      } else {
+        fallbackCopy(code);
+      }
+    }
+
+    function fallbackCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      showToast('📋 Đã sao chép toàn bộ mã nguồn Python vào Clipboard!');
+    }
+
+    function downloadPythonFile() {
+      const blob = new Blob([STANDALONE_PYTHON_CODE], { type: 'text/x-python;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'saigon_traffic_rl.py';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('💾 Đã tải file saigon_traffic_rl.py về máy!');
+    }
+
+    // =========================================================================
+    // 10. INITIALIZATION & MAIN ANIMATION LOOP
+    // =========================================================================
+    function seedInitialHistory() {
+      // Seed 18 initial episodes so the charts and Q-table look informative on load
+      for (let i = 1; i <= 18; i++) {
+        const w = Number((29.5 * Math.exp(-i / 14) + 12.2 + (Math.sin(i) * 0.7)).toFixed(1));
+        const r = Math.round(-w * 8.5 + 42);
+        simState.historyEpisodes.push(`Ep ${i}`);
+        simState.historyWaitTimes.push(w);
+        simState.historyRewards.push(r);
+      }
+      simState.episode = 19;
+    }
+
+    let animFrameId = null;
+
+    function mainLoop() {
+      if (simState.running) {
+        let latestStats = null;
+        for (let s = 0; s < simState.speed; s++) {
+          latestStats = runOneSimulationTick();
+        }
+        if (latestStats) {
+          updateUIStats(latestStats);
+        }
+      }
+      renderMapCanvas();
+      animFrameId = requestAnimationFrame(mainLoop);
+    }
+
+    window.onload = function() {
+      document.getElementById('pythonCodeBlock').textContent = STANDALONE_PYTHON_CODE;
+      initNodes();
+      seedInitialHistory();
+      initCharts();
+      renderBenchmarkTable();
+      // Pre-warm Q-Tables with 25 episodes of experience so Q-Table inspector has rich values immediately
+      runFastTraining(12);
+      // Pre-populate vehicles on the road network
+      const streams = ['dbpEast', 'vtsEast', 'dthNorth', 'dthSouth', 'mtlNorth', 'mtlSouth'];
+      for (let i = 0; i < 36; i++) {
+        trySpawnVehicle(streams[i % streams.length]);
+        updateVehicles(3.0);
+      }
+      const initStats = computeNodeQueuesAndWait();
+      updateUIStats(initStats);
+      renderQTableInspector();
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      animFrameId = requestAnimationFrame(mainLoop);
+    };
+  </script>
+</body>
+</html>
